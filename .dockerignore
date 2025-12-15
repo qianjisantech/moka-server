@@ -1,0 +1,15 @@
+node_modules
+.git
+.gitignore
+.env.local
+.env.*.local
+*.md
+.vscode
+.idea
+.DS_Store
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+data.json
+# 注意：.env 文件不会被忽略，以便在构建时使用
+# 生产环境建议使用环境变量或 secrets 管理敏感信息
