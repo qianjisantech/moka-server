@@ -676,7 +676,7 @@ class MockDatabase {
       id: snowflake.generate(),
       username: userData.username,
       password: this.hashPassword(userData.password),
-      email: userData.email || '',
+      // 注意：不再使用空字符串作为默认邮箱，避免触发唯一索引冲突
       avatar: userData.avatar || '',
       role: userData.role || 'user', // admin, user
       status: userData.status || 'active', // active, inactive
@@ -684,6 +684,11 @@ class MockDatabase {
       created_at: new Date().toISOString(),
       updated_at: new Date().toISOString()
     };
+
+    // 只有在提供邮箱时才写入 email 字段（配合 unique + sparse 索引）
+    if (userData.email) {
+      user.email = userData.email;
+    }
 
     await db.collection('users').insertOne(user);
     
@@ -732,13 +737,23 @@ class MockDatabase {
       }
     }
 
-    if (updates.email) {
-      const existingEmail = await db.collection('users').findOne({ 
-        email: updates.email,
-        id: { $ne: id }
-      });
-      if (existingEmail) {
-        throw new Error('邮箱已存在');
+    // 处理邮箱更新逻辑
+    let unsetData = null;
+    if (Object.prototype.hasOwnProperty.call(updates, 'email')) {
+      const newEmail = updates.email;
+      if (newEmail) {
+        // 有效邮箱，检查是否重复
+        const existingEmail = await db.collection('users').findOne({ 
+          email: newEmail,
+          id: { $ne: id }
+        });
+        if (existingEmail) {
+          throw new Error('邮箱已存在');
+        }
+      } else {
+        // 空字符串 / null / undefined 视为删除邮箱字段，避免出现多个 email = '' 触发唯一索引
+        unsetData = { email: '' };
+        delete updates.email;
       }
     }
 
@@ -747,9 +762,14 @@ class MockDatabase {
       updated_at: new Date().toISOString()
     };
 
+    const updateOps = { $set: updateData };
+    if (unsetData) {
+      updateOps.$unset = unsetData;
+    }
+
     const result = await db.collection('users').findOneAndUpdate(
       { id: id },
-      { $set: updateData },
+      updateOps,
       { returnDocument: 'after' }
     );
 
